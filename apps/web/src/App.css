@@ -72,6 +72,7 @@ button { font: inherit; }
 .snake-mode-card { align-items: flex-start; background: #faf7ef; border: 1px solid var(--line); color: var(--ink); cursor: pointer; display: grid; gap: 8px; min-height: 178px; padding: 18px; text-align: left; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .snake-mode-card:hover, .snake-mode-card:focus-visible { border-color: var(--ink); box-shadow: 5px 5px 0 var(--yellow); outline: none; transform: translate(-2px, -2px); }
 .snake-mode-card.featured { background: #fff0e7; border-color: var(--orange); }
+.snake-mode-card.unavailable { cursor: not-allowed; opacity: .62; }
 .mode-card-art { align-items: center; background: var(--yellow); border: 2px solid var(--ink); border-radius: 50%; display: flex; font: 800 1rem/1 var(--mono); height: 36px; justify-content: center; width: 36px; }
 .multiplayer-art { border-radius: 0; color: var(--teal); letter-spacing: -.15em; }
 .snake-mode-card strong { font: 800 1.25rem/1 var(--heading); }
@@ -115,8 +116,18 @@ button { font: inherit; }
 .waiting-indicator { align-items: center; color: var(--teal); display: inline-flex; font: 700 .72rem var(--mono); gap: 10px; margin: 19px 0 4px; text-transform: uppercase; }
 .waiting-ring { animation: orbit-spin 1.7s linear infinite; border: 2px solid var(--line); border-top-color: var(--orange); border-radius: 50%; height: 16px; width: 16px; }
 @keyframes orbit-spin { to { transform: rotate(360deg); } }
-.status-panel { max-width: 530px; margin: 0 auto; text-align: center; }
+.status-panel { max-width: 780px; margin: 0 auto; text-align: center; }
 .status-panel .eyebrow { margin-bottom: 12px; }
+.chess-game { margin: 24px auto 4px; max-width: 720px; }
+.chess-board { border: 8px solid var(--ink); box-shadow: 8px 8px 0 rgba(31,37,34,.12); display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-auto-rows: 1fr; margin: 14px auto; max-width: 720px; width: 100%; aspect-ratio: 1; }
+.chess-square { align-items: center; aspect-ratio: 1; border: 0; box-sizing: border-box; cursor: pointer; display: flex; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(1.7rem, 7vw, 3.3rem); height: 100%; justify-content: center; line-height: 1; min-width: 0; padding: 0; position: relative; transition: filter .15s ease, box-shadow .15s ease; width: 100%; }
+.chess-square.light { background: #ead9b9; }
+.chess-square.dark { background: #8b6347; }
+.chess-square.piece-white { color: var(--yellow); text-shadow: 1px 2px 0 #665849, -1px -1px 0 #665849; }
+.chess-square.piece-black { color: var(--ink); text-shadow: 1px 1px 0 #f3dfba; }
+.chess-square:hover, .chess-square:focus-visible { filter: brightness(1.1); outline: none; }
+.chess-square.selected { box-shadow: inset 0 0 0 4px var(--orange); }
+.chess-square.selected::after { background: var(--yellow); border-radius: 50%; content: ''; height: 13%; opacity: .9; position: absolute; width: 13%; }
 .tic-tac-toe { margin: 24px auto 4px; max-width: 330px; }
 .turn-banner { background: var(--ink); color: var(--yellow); font: 700 .76rem var(--mono); padding: 10px; text-transform: uppercase; letter-spacing: .05em; }
 .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 12px auto; }

@@ -38,12 +38,13 @@ function App() {
   const [snakeRunning, setSnakeRunning] = useState(true);
   const [snakeHighScore, setSnakeHighScore] = useState(0);
   const [flappyBirdY, setFlappyBirdY] = useState(45);
-  const [flappyVelocity, setFlappyVelocity] = useState(0);
+  const [, setFlappyVelocity] = useState(0);
   const [flappyPipeX, setFlappyPipeX] = useState(100);
   const [flappyGapY, setFlappyGapY] = useState(48);
   const [flappyScore, setFlappyScore] = useState(0);
   const [flappyBestScore, setFlappyBestScore] = useState(0);
   const [flappyRunning, setFlappyRunning] = useState(false);
+  const [selectedChessSquare, setSelectedChessSquare] = useState<string | null>(null);
 
   const config = useMemo<GameConfig>(
     () => (selectedGame === "CHESS" ? { mode: chessMode } : {}),
@@ -108,12 +109,7 @@ function App() {
   const chooseGame = (gameType: GameType) => {
     setSelectedGame(gameType);
     setMessage("");
-    if (gameType === "SNAKE") {
-      setScreen("matchmaking");
-      return;
-    }
     setScreen("matchmaking");
-    startQuickPlay(gameType, chessMode);
   };
   const startQuickPlay = (gameType: GameType, mode: ChessMode) => {
     const quickPlayConfig: GameConfig = gameType === "CHESS" ? { mode } : {};
@@ -279,12 +275,23 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === " " || event.key === "ArrowUp") {
         event.preventDefault();
-        flap();
+        setFlappyVelocity(-2.8);
       }
     };
     const interval = window.setInterval(() => {
-      setFlappyVelocity((velocity) => velocity + 0.18);
-      setFlappyBirdY((birdY) => birdY + flappyVelocity);
+      setFlappyVelocity((velocity) => {
+        const nextVelocity = velocity + 0.18;
+        setFlappyBirdY((birdY) => {
+          const nextBirdY = birdY + nextVelocity;
+          const birdHitPipe = flappyPipeX > 13 && flappyPipeX < 29 && (nextBirdY < flappyGapY - 12 || nextBirdY > flappyGapY + 12);
+          if (nextBirdY < 0 || nextBirdY > 94 || birdHitPipe) {
+            setFlappyRunning(false);
+            setFlappyBestScore((best) => Math.max(best, flappyScore));
+          }
+          return nextBirdY;
+        });
+        return nextVelocity;
+      });
       setFlappyPipeX((pipeX) => {
         const nextPipeX = pipeX - 1.6;
         if (nextPipeX < -12) {
@@ -303,20 +310,33 @@ function App() {
       window.clearInterval(interval);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [flappyRunning, flappyVelocity, screen, selectedGame]);
-
-  useEffect(() => {
-    if (screen !== "single-player" || selectedGame !== "FLAPPY" || !flappyRunning) return;
-    const birdHitPipe = flappyPipeX > 13 && flappyPipeX < 29 && (flappyBirdY < flappyGapY - 12 || flappyBirdY > flappyGapY + 12);
-    if (flappyBirdY < 0 || flappyBirdY > 94 || birdHitPipe) {
-      setFlappyRunning(false);
-      setFlappyBestScore((best) => Math.max(best, flappyScore));
-    }
-  }, [flappyBirdY, flappyGapY, flappyPipeX, flappyScore, flappyRunning, screen, selectedGame]);
+  }, [flappyGapY, flappyPipeX, flappyRunning, flappyScore, screen, selectedGame]);
 
   const playTicTacToe = (cell: number) => {
     if (!game || game.gameType !== "TIC_TAC_TOE") return;
     socket.emit("tic-tac-toe-move", { gameId: game.id, cell });
+  };
+
+  const playChessSquare = (square: string) => {
+    if (!game?.chess || game.status !== "IN_PROGRESS") return;
+    if (!selectedChessSquare) {
+      const squareIndex = (8 - Number(square[1])) * 8 + square.charCodeAt(0) - 97;
+      const myColor = game.players[0]?.id === socket.id ? "w" : "b";
+      if (!game.chess.board[squareIndex] || game.chess.colors[squareIndex] !== myColor || game.chess.turn !== myColor) return;
+      setSelectedChessSquare(square);
+      return;
+    }
+    if (selectedChessSquare === square) {
+      setSelectedChessSquare(null);
+      return;
+    }
+    socket.emit("chess-move", { gameId: game.id, from: selectedChessSquare, to: square, promotion: "q" });
+    setSelectedChessSquare(null);
+  };
+
+  const chessPieceSymbols: Record<string, string> = {
+    "w-k": "♔", "w-q": "♕", "w-r": "♖", "w-b": "♗", "w-n": "♘", "w-p": "♙",
+    "b-k": "♚", "b-q": "♛", "b-r": "♜", "b-b": "♝", "b-n": "♞", "b-p": "♟",
   };
 
   const sendSnakeMove = (direction: SnakePoint) => {
@@ -410,6 +430,7 @@ function App() {
     : "";
   const modeLabel =
     typeof game?.config.mode === "string" ? game.config.mode : "Standard";
+  const supportsSinglePlayer = selectedGame === "SNAKE" || selectedGame === "FLAPPY";
 
   return (
     <main className="game-lobby">
@@ -503,36 +524,21 @@ function App() {
       {screen === "matchmaking" && selectedGame && (
         <section className="lobby-panel matchmaking-panel">
           <p className="section-kicker">Quick play / {games.find(({ type }) => type === selectedGame)?.label}</p>
-          {selectedGame === "SNAKE" ? (
-            <>
-              <h2>Choose how to play</h2>
-              <p className="lead">Warm up alone or invite another player to an arcade showdown.</p>
-              <div className="snake-mode-grid">
-                <button className="snake-mode-card featured" onClick={() => startSinglePlayer("SNAKE")}>
-                  <span className="mode-card-art" aria-hidden="true">●</span>
-                  <strong>Play single player</strong>
-                  <span>Eat, grow, and beat your high score.</span>
-                </button>
-                <button className="snake-mode-card" onClick={() => startQuickPlay("SNAKE", chessMode)}>
-                  <span className="mode-card-art multiplayer-art" aria-hidden="true">••</span>
-                  <strong>Play multiplayer</strong>
-                  <span>Find an opponent or open a room.</span>
-                </button>
-              </div>
-              {message && <p className="search-status">{message}</p>}
-            </>
-          ) : (
-            <>
-              <h2>Find your next opponent</h2>
-              <p className="lead">We will match you with an open player, then keep your spot ready if the room is still waiting.</p>
-              <div className="search-orbit" aria-hidden="true">
-                <span className="orbit-ring" />
-                <span className="orbit-dot" />
-                <span className="orbit-center">{selectedGame === "CHESS" ? "♞" : "OG"}</span>
-              </div>
-              <p className="search-status">{message || "Finding players..."}</p>
-            </>
-          )}
+          <h2>Choose how to play</h2>
+          <p className="lead">Choose a solo challenge or connect with another player.</p>
+          <div className="snake-mode-grid">
+            <button className={`snake-mode-card${supportsSinglePlayer ? " featured" : " unavailable"}`} onClick={() => supportsSinglePlayer && startSinglePlayer(selectedGame)} disabled={!supportsSinglePlayer}>
+              <span className="mode-card-art" aria-hidden="true">●</span>
+              <strong>Play single player</strong>
+              <span>{supportsSinglePlayer ? "Practice alone and beat your best score." : "Single player is not available for this game yet."}</span>
+            </button>
+            <button className="snake-mode-card" onClick={() => startQuickPlay(selectedGame, chessMode)}>
+              <span className="mode-card-art multiplayer-art" aria-hidden="true">••</span>
+              <strong>Play multiplayer</strong>
+              <span>Find an opponent or open a private room.</span>
+            </button>
+          </div>
+          {message && <p className="search-status">{message}</p>}
           {selectedGame === "CHESS" && (
             <fieldset className="quick-mode-fieldset">
               <legend>Time control</legend>
@@ -547,8 +553,6 @@ function App() {
             </fieldset>
           )}
           <div className="action-row centered-actions">
-            {selectedGame !== "SNAKE" && <button className="primary-button" onClick={() => startQuickPlay(selectedGame, chessMode)}>Search again</button>}
-            {selectedGame !== "SNAKE" && <button className="secondary-button" onClick={() => startSinglePlayer(selectedGame)}>Single player</button>}
             <button className="secondary-button" onClick={openRoomManager}>Room manager</button>
           </div>
         </section>
@@ -676,8 +680,31 @@ function App() {
           <p className="eyebrow">
             {gameLabel} · {modeLabel}
           </p>
-          <h2>{game.gameType === "TIC_TAC_TOE" ? (game.ticTacToe?.winner ? "Round complete" : "Make your mark") : game.gameType === "FLAPPY" ? (game.flappy?.winner ? "Flight complete" : "Flappy race") : "Game Started"}</h2>
-          {game.gameType === "TIC_TAC_TOE" && game.ticTacToe ? (
+          <h2>{game.gameType === "CHESS" ? (game.chess?.winner ? "Game complete" : "Play Chess") : game.gameType === "TIC_TAC_TOE" ? (game.ticTacToe?.winner ? "Round complete" : "Make your mark") : game.gameType === "FLAPPY" ? (game.flappy?.winner ? "Flight complete" : "Flappy race") : "Game Started"}</h2>
+          {game.gameType === "CHESS" && game.chess ? (
+            <div className="chess-game">
+              {(() => {
+                const chess = game.chess;
+                return <>
+              <div className="turn-banner">
+                {game.chess.winner === "DRAW" ? "Draw game" : game.chess.winner ? `${game.chess.winner === (game.players[0]?.id === socket.id ? "w" : "b") ? "You win" : "Opponent wins"}` : `${game.chess.check ? "Check · " : ""}${game.chess.turn === (game.players[0]?.id === socket.id ? "w" : "b") ? "Your turn" : "Opponent's turn"}`}
+              </div>
+              <div className="chess-board" role="grid" aria-label="Chess board">
+                {chess.board.map((piece, index) => {
+                  const file = index % 8;
+                  const rank = 7 - Math.floor(index / 8);
+                  const square = `${String.fromCharCode(97 + file)}${rank + 1}`;
+                  const isSelected = selectedChessSquare === square;
+                  const pieceColor = chess.colors[index];
+                  return <button key={square} className={`chess-square ${(file + rank) % 2 === 0 ? "light" : "dark"}${isSelected ? " selected" : ""}${pieceColor === "w" ? " piece-white" : pieceColor === "b" ? " piece-black" : ""}`} onClick={() => playChessSquare(square)} aria-label={square}>{piece ? chessPieceSymbols[`${pieceColor}-${piece}`] : ""}</button>;
+                })}
+              </div>
+              <p className="match-note">Select one of your pieces, then select its destination. Pawn promotion defaults to queen.</p>
+              {game.chess.winner && <div className="rematch-area"><div className="action-row centered-actions"><button className="secondary-button" onClick={startNewGame}>New game</button></div>{rematchControls()}</div>}
+                </>;
+              })()}
+            </div>
+          ) : game.gameType === "TIC_TAC_TOE" && game.ticTacToe ? (
             <div className="tic-tac-toe">
               <div className="turn-banner">
                 {game.ticTacToe.winner === "DRAW" ? "Draw game" : game.ticTacToe.winner ? `${game.ticTacToe.winner} wins` : isMyTurn ? `Your turn · ${myMark}` : "Opponent's turn"}

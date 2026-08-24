@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { Chess } from "chess.js";
 import type {
+  ChessColor,
+  ChessState,
   FlappyPlayerState,
   FlappyState,
   Game,
@@ -53,6 +56,7 @@ export class GameManager {
         rematchVotes: [],
       };
     }
+    if (validGameType === "CHESS") game.chess = createChessState();
     this.games.set(game.id, game);
     return game;
   }
@@ -89,6 +93,26 @@ export class GameManager {
       game.status = "FINISHED";
     } else {
       game.ticTacToe.turn = game.players[playerIndex === 0 ? 1 : 0].id;
+    }
+    return game;
+  }
+
+  makeChessMove(gameId: string, playerId: string, from: unknown, to: unknown, promotion: unknown): Game {
+    const game = this.getGame(gameId);
+    if (game.gameType !== "CHESS" || !game.chess) throw new GameManagerError("This game does not support Chess moves");
+    if (game.status !== "IN_PROGRESS") throw new GameManagerError("The game is not in progress");
+    if (typeof from !== "string" || typeof to !== "string") throw new GameManagerError("Choose valid Chess squares");
+    const playerIndex = game.players.findIndex((player) => player.id === playerId);
+    if (playerIndex === -1) throw new GameManagerError("Player is not in this game");
+    const color: ChessColor = playerIndex === 0 ? "w" : "b";
+    if (game.chess.turn !== color) throw new GameManagerError("Wait for your turn");
+    const chess = new Chess(chessFen(game.chess));
+    try {
+      const move = chess.move({ from, to, promotion: typeof promotion === "string" ? promotion : undefined });
+      game.chess = chessState(chess, move.from, move.to);
+      if (chess.isGameOver()) game.status = "FINISHED";
+    } catch {
+      throw new GameManagerError("That Chess move is not legal");
     }
     return game;
   }
@@ -160,6 +184,7 @@ export class GameManager {
       }
       if (game.gameType === "SNAKE") game.snake = createSnakeState(game.players);
       if (game.gameType === "FLAPPY") game.flappy = createFlappyState(game.players);
+      if (game.gameType === "CHESS") game.chess = createChessState();
       game.rematch = { requestedBy: null, acceptedBy: [], declinedBy: [] };
       game.status = "IN_PROGRESS";
     }
@@ -318,6 +343,22 @@ function hasWinningLine(
     [0, 3, 6], [1, 4, 7], [2, 5, 8],
     [0, 4, 8], [2, 4, 6],
   ].some((line) => line.every((cell) => board[cell] === mark));
+}
+
+function createChessState(): ChessState {
+  return chessState(new Chess(), null, null);
+}
+
+function chessState(chess: Chess, from: string | null, to: string | null): ChessState {
+  const board = chess.board();
+  const pieces = board.flatMap((rank) => rank.map((piece) => piece?.type ?? null));
+  const colors = board.flatMap((rank) => rank.map((piece) => piece?.color ?? null));
+  const winner: ChessState["winner"] = chess.isCheckmate() ? (chess.turn() === "w" ? "b" : "w") : chess.isDraw() ? "DRAW" : null;
+  return { fen: chess.fen(), board: pieces, colors, turn: chess.turn(), winner, check: chess.inCheck(), lastMove: from && to ? { from, to } : null };
+}
+
+function chessFen(state: ChessState): string {
+  return state.fen;
 }
 
 function createSnakeState(players: Player[]): SnakeState {

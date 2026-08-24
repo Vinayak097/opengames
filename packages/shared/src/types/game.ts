@@ -12,6 +12,19 @@ export type GameStatus = "WAITING" | "IN_PROGRESS" | "FINISHED";
 export type GameType = "CHESS" | "SNAKE" | "TIC_TAC_TOE" | "FLAPPY";
 
 export type ChessMode = "BULLET" | "BLITZ" | "RAPID";
+export type ChessColor = "w" | "b";
+export type ChessPiece = "p" | "n" | "b" | "r" | "q" | "k";
+export type ChessWinner = ChessColor | "DRAW" | null;
+
+export type ChessState = {
+  fen: string;
+  board: (ChessPiece | null)[];
+  colors: (ChessColor | null)[];
+  turn: ChessColor;
+  winner: ChessWinner;
+  check: boolean;
+  lastMove: { from: string; to: string } | null;
+};
 
 /**
  * Generic room configuration. Game-specific configuration is validated by the
@@ -83,6 +96,7 @@ export type Game = {
   gameType: GameType;
   config: GameConfig;
   ticTacToe?: TicTacToeState;
+  chess?: ChessState;
   snake?: SnakeState;
   flappy?: FlappyState;
   rematch?: RematchState;

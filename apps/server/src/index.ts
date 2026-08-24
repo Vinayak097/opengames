@@ -6,9 +6,10 @@ import { GameManager, GameManagerError } from "./managers/GameManager";
 
 const app = express();
 const httpServer = createServer(app);
+const allowedOrigin = process.env.CLIENT_URL ?? "http://localhost:5173";
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: allowedOrigin,
   },
 });
 const gameManager = new GameManager();
@@ -35,6 +36,7 @@ type GameEvent = { game: Game };
 type GameErrorEvent = { message: string };
 type TicTacToeMoveRequest = { gameId: string; cell: number };
 type SnakeMoveRequest = { gameId: string; direction: { x: number; y: number } };
+type ChessMoveRequest = { gameId: string; from: string; to: string; promotion?: string };
 type RematchResponseRequest = { gameId: string; accept: boolean };
 
 const getErrorMessage = (error: unknown): string =>
@@ -69,6 +71,9 @@ const isTicTacToeMoveRequest = (
 
 const isSnakeMoveRequest = (value: unknown): value is SnakeMoveRequest =>
   isObject(value) && typeof value.gameId === "string" && isObject(value.direction) && typeof value.direction.x === "number" && typeof value.direction.y === "number";
+
+const isChessMoveRequest = (value: unknown): value is ChessMoveRequest =>
+  isObject(value) && typeof value.gameId === "string" && typeof value.from === "string" && typeof value.to === "string" && (value.promotion === undefined || typeof value.promotion === "string");
 
 const isRematchResponseRequest = (value: unknown): value is RematchResponseRequest =>
   isObject(value) && typeof value.gameId === "string" && typeof value.accept === "boolean";
@@ -187,6 +192,16 @@ io.on("connection", (socket) => {
         socket.id,
         request.cell,
       );
+      io.to(game.id).emit("game-updated", game);
+    } catch (error) {
+      emitGameError(socket, getErrorMessage(error));
+    }
+  });
+
+  socket.on("chess-move", (request: unknown) => {
+    try {
+      if (!isChessMoveRequest(request)) throw new GameManagerError("Invalid Chess move request");
+      const game = gameManager.makeChessMove(request.gameId, socket.id, request.from, request.to, request.promotion);
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -314,6 +329,7 @@ setInterval(() => {
   }
 }, 150);
 
-httpServer.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+const port = Number(process.env.PORT ?? 3000);
+httpServer.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

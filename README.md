@@ -158,3 +158,17 @@ Learn more about the power of Turborepo:
 - [Configuration Options](https://turborepo.dev/docs/reference/configuration)
 - [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
 "# opengames" 
+
+## Deployment
+
+The web app and Socket.IO server must be deployed as separate services. Configure the web service with `VITE_SERVER_URL` set to the public server URL. Configure the server with `CLIENT_URL` set to the public web URL and `PORT` set by the hosting provider.
+
+Typical commands:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter server build
+pnpm --filter server start
+```
+
+Build the web service with `pnpm --filter web build` and serve `apps/web/dist` as a static site.
