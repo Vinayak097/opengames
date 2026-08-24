@@ -19,10 +19,71 @@ export type ChessMode = "BULLET" | "BLITZ" | "RAPID";
  */
 export type GameConfig = Record<string, unknown>;
 
+export type TicTacToeMark = "X" | "O";
+export type TicTacToeWinner = TicTacToeMark | "DRAW" | null;
+
+export type TicTacToeState = {
+  board: (TicTacToeMark | null)[];
+  turn: string;
+  winner: TicTacToeWinner;
+  rematchVotes: string[];
+};
+
+export type SnakePoint = { x: number; y: number };
+export type SnakeDirection = SnakePoint;
+
+export type SnakePlayerState = {
+  playerId: string;
+  body: SnakePoint[];
+  direction: SnakeDirection;
+  score: number;
+  alive: boolean;
+};
+
+export type SnakeState = {
+  width: number;
+  height: number;
+  food: SnakePoint;
+  players: SnakePlayerState[];
+  winner: string | "DRAW" | null;
+  rematchVotes: string[];
+};
+
+export type RematchState = {
+  requestedBy: string | null;
+  acceptedBy: string[];
+  declinedBy: string[];
+};
+
+export type FlappyState = {
+  score: number;
+  bestScore: number;
+  birdY: number;
+  velocity: number;
+  pipeX: number;
+  pipeGapY: number;
+  running: boolean;
+  players?: FlappyPlayerState[];
+  winner?: string | "DRAW" | null;
+  rematchVotes?: string[];
+};
+
+export type FlappyPlayerState = {
+  playerId: string;
+  birdY: number;
+  velocity: number;
+  score: number;
+  alive: boolean;
+};
+
 export type Game = {
   id: string;
   players: Player[];
   status: GameStatus;
   gameType: GameType;
   config: GameConfig;
+  ticTacToe?: TicTacToeState;
+  snake?: SnakeState;
+  flappy?: FlappyState;
+  rematch?: RematchState;
 };

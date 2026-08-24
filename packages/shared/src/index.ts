@@ -4,5 +4,12 @@ export type {
   GameConfig,
   GameStatus,
   GameType,
+  FlappyState,
   Player,
+  RematchState,
+  SnakeDirection,
+  SnakePlayerState,
+  SnakePoint,
+  SnakeState,
+  TicTacToeMark,
 } from "./types/game";
