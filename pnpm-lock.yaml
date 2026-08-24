@@ -23,6 +23,12 @@ importers:
       '@opengames/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
       chess.js:
         specifier: ^1.4.0
         version: 1.4.0
@@ -35,13 +41,6 @@ importers:
       socket.io:
         specifier: ^4.8.3
         version: 4.8.3
-    devDependencies:
-      '@types/express':
-        specifier: ^5.0.6
-        version: 5.0.6
-      '@types/node':
-        specifier: ^26.2.0
-        version: 26.2.0
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
