@@ -5,6 +5,9 @@ const serverUrl =
 
 export const socket = io(serverUrl, {
   autoConnect: false,
-  transports: ["websocket", "polling"],
+  transports: ["polling", "websocket"],
   withCredentials: true,
+  upgrade: true,
+  reconnection: true,
+  reconnectionAttempts: 10,
 });

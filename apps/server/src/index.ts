@@ -7,6 +7,16 @@ import { GameManager, GameManagerError } from "./managers/GameManager";
 const app = express();
 const httpServer = createServer(app);
 
+/**
+ * Allowed frontend origins
+ *
+ * Local development:
+ * - Vite: http://localhost:5173
+ * - Other local frontend: http://localhost:3000
+ *
+ * Production:
+ * - Vercel frontend
+ */
 const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
@@ -15,48 +25,34 @@ const defaultAllowedOrigins = [
   "https://opengames-web.vercel.app",
 ];
 
-const parseAllowedOrigins = (): string[] => {
-  const configured = [
-    process.env.CLIENT_URL,
-    process.env.ALLOWED_ORIGINS,
-  ].flatMap(
-    (value) =>
-      value
-        ?.split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean) ?? [],
-  );
+/**
+ * Read additional origins from Render environment variables.
+ *
+ * Example:
+ *
+ * CLIENT_URL=https://opengames-web.vercel.app
+ *
+ * OR:
+ *
+ * ALLOWED_ORIGINS=http://localhost:5173,https://opengames-web.vercel.app
+ */
 
-  return configured.length > 0 ? configured : defaultAllowedOrigins;
-};
+/**
+ * Vercel gives preview deployments a unique subdomain. Keep this limited to
+ * this frontend project rather than allowing every `*.vercel.app` origin.
 
-const allowedOrigins = parseAllowedOrigins();
-
+/**
+ * Socket.IO server
+ */
 const io = new Server(httpServer, {
   cors: {
-    origin: (origin, callback) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-
-      const normalizedOrigin = origin.replace(/\/$/, "");
-      const isAllowed = allowedOrigins.some(
-        (allowedOrigin) =>
-          allowedOrigin.replace(/\/$/, "") === normalizedOrigin,
-      );
-
-      if (isAllowed) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`Origin not allowed: ${origin}`));
-    },
-    methods: ["GET", "POST"],
-    credentials: true,
+    origin: defaultAllowedOrigins,
   },
 });
+
+/**
+ * Game manager
+ */
 const gameManager = new GameManager();
 
 type CreateGameRequest = {
@@ -77,22 +73,47 @@ type FindOpponentRequest = {
 };
 
 type GameResponse = { game: Game | undefined } | { error: string };
-type GameEvent = { game: Game };
-type GameErrorEvent = { message: string };
-type TicTacToeMoveRequest = { gameId: string; cell: number };
-type SnakeMoveRequest = { gameId: string; direction: { x: number; y: number } };
+
+type GameEvent = {
+  game: Game;
+};
+
+type GameErrorEvent = {
+  message: string;
+};
+
+type TicTacToeMoveRequest = {
+  gameId: string;
+  cell: number;
+};
+
+type SnakeMoveRequest = {
+  gameId: string;
+  direction: {
+    x: number;
+    y: number;
+  };
+};
+
 type ChessMoveRequest = {
   gameId: string;
   from: string;
   to: string;
   promotion?: string;
 };
-type RematchResponseRequest = { gameId: string; accept: boolean };
+
+type RematchResponseRequest = {
+  gameId: string;
+  accept: boolean;
+};
 
 const getErrorMessage = (error: unknown): string =>
   error instanceof GameManagerError
     ? error.message
     : "Unable to complete request";
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isCreateGameRequest = (value: unknown): value is CreateGameRequest =>
   isObject(value) &&
@@ -110,9 +131,6 @@ const isFindOpponentRequest = (value: unknown): value is FindOpponentRequest =>
   "gameType" in value &&
   isObject(value.config) &&
   (value.playerName === undefined || typeof value.playerName === "string");
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isTicTacToeMoveRequest = (
   value: unknown,
@@ -143,13 +161,18 @@ const isRematchResponseRequest = (
   typeof value.accept === "boolean";
 
 const emitGameError = (socket: Socket, message: string): void => {
-  socket.emit("game-error", { message } satisfies GameErrorEvent);
+  socket.emit("game-error", {
+    message,
+  } satisfies GameErrorEvent);
 };
 
 const emitGameStarted = (game: Game): void => {
   io.to(game.id).emit("game-started", { game } satisfies GameEvent);
 };
 
+/**
+ * Socket.IO connection
+ */
 io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
 
@@ -160,6 +183,7 @@ io.on("connection", (socket) => {
         if (!isCreateGameRequest(request)) {
           throw new GameManagerError("Invalid create-game request");
         }
+
         const game = gameManager.createGame(
           request.gameType,
           {
@@ -168,13 +192,22 @@ io.on("connection", (socket) => {
           },
           request.config,
         );
+
         void socket.join(game.id);
-        socket.emit("game-created", { game } satisfies GameEvent);
+
+        socket.emit("game-created", {
+          game,
+        } satisfies GameEvent);
+
         callback?.({ game });
       } catch (error) {
         const message = getErrorMessage(error);
+
         emitGameError(socket, message);
-        callback?.({ error: message });
+
+        callback?.({
+          error: message,
+        });
       }
     },
   );
@@ -186,22 +219,32 @@ io.on("connection", (socket) => {
         if (!isJoinGameRequest(request)) {
           throw new GameManagerError("Invalid join-game request");
         }
+
         const game = gameManager.joinGame(request.gameId, {
           id: socket.id,
           name: request.playerName,
         });
+
         void socket.join(game.id);
+
         socket.to(game.id).emit("player-joined", {
           player: game.players.at(-1),
           game,
         });
+
         io.to(game.id).emit("game-updated", game);
+
         emitGameStarted(game);
+
         callback?.({ game });
       } catch (error) {
         const message = getErrorMessage(error);
+
         emitGameError(socket, message);
-        callback?.({ error: message });
+
+        callback?.({
+          error: message,
+        });
       }
     },
   );
@@ -213,16 +256,23 @@ io.on("connection", (socket) => {
         if (!isFindOpponentRequest(request)) {
           throw new GameManagerError("Invalid find-opponent request");
         }
+
         const waitingGame = gameManager.findWaitingGame(
           request.gameType,
           request.config,
         );
+
         if (!waitingGame) {
           const message = "No opponent found";
+
           socket.emit("opponent-not-found", {
             message,
           } satisfies GameErrorEvent);
-          callback?.({ error: message });
+
+          callback?.({
+            error: message,
+          });
+
           return;
         }
 
@@ -230,18 +280,27 @@ io.on("connection", (socket) => {
           id: socket.id,
           name: request.playerName,
         });
+
         void socket.join(game.id);
+
         socket.to(game.id).emit("player-joined", {
           player: game.players.at(-1),
           game,
         });
+
         io.to(game.id).emit("game-updated", game);
+
         emitGameStarted(game);
+
         callback?.({ game });
       } catch (error) {
         const message = getErrorMessage(error);
+
         emitGameError(socket, message);
-        callback?.({ error: message });
+
+        callback?.({
+          error: message,
+        });
       }
     },
   );
@@ -251,11 +310,13 @@ io.on("connection", (socket) => {
       if (!isTicTacToeMoveRequest(request)) {
         throw new GameManagerError("Invalid move request");
       }
+
       const game = gameManager.makeTicTacToeMove(
         request.gameId,
         socket.id,
         request.cell,
       );
+
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -264,8 +325,10 @@ io.on("connection", (socket) => {
 
   socket.on("chess-move", (request: unknown) => {
     try {
-      if (!isChessMoveRequest(request))
+      if (!isChessMoveRequest(request)) {
         throw new GameManagerError("Invalid Chess move request");
+      }
+
       const game = gameManager.makeChessMove(
         request.gameId,
         socket.id,
@@ -273,6 +336,7 @@ io.on("connection", (socket) => {
         request.to,
         request.promotion,
       );
+
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -284,8 +348,11 @@ io.on("connection", (socket) => {
       if (typeof gameId !== "string") {
         throw new GameManagerError("Invalid rematch request");
       }
+
       const game = gameManager.requestTicTacToeRematch(gameId, socket.id);
+
       io.to(game.id).emit("game-updated", game);
+
       if (game.status === "IN_PROGRESS") {
         emitGameStarted(game);
       }
@@ -299,11 +366,13 @@ io.on("connection", (socket) => {
       if (!isSnakeMoveRequest(request)) {
         throw new GameManagerError("Invalid Snake move request");
       }
+
       const game = gameManager.makeSnakeMove(
         request.gameId,
         socket.id,
         request.direction,
       );
+
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -312,11 +381,17 @@ io.on("connection", (socket) => {
 
   socket.on("snake-rematch", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string")
+      if (typeof gameId !== "string") {
         throw new GameManagerError("Invalid rematch request");
+      }
+
       const game = gameManager.requestSnakeRematch(gameId, socket.id);
+
       io.to(game.id).emit("game-updated", game);
-      if (game.status === "IN_PROGRESS") emitGameStarted(game);
+
+      if (game.status === "IN_PROGRESS") {
+        emitGameStarted(game);
+      }
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
     }
@@ -324,9 +399,12 @@ io.on("connection", (socket) => {
 
   socket.on("flappy-flap", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string")
+      if (typeof gameId !== "string") {
         throw new GameManagerError("Invalid Flappy move request");
+      }
+
       const game = gameManager.makeFlappyFlap(gameId, socket.id);
+
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -335,9 +413,12 @@ io.on("connection", (socket) => {
 
   socket.on("request-rematch", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string")
-        throw new GameManagerError("Invalid rematch request");
+      if (typeof gameId !== "string") {
+        throw new GameManagerError("Invalid game ID");
+      }
+
       const game = gameManager.requestRematch(gameId, socket.id);
+
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -346,15 +427,21 @@ io.on("connection", (socket) => {
 
   socket.on("respond-rematch", (request: unknown) => {
     try {
-      if (!isRematchResponseRequest(request))
+      if (!isRematchResponseRequest(request)) {
         throw new GameManagerError("Invalid rematch response");
+      }
+
       const game = gameManager.respondRematch(
         request.gameId,
         socket.id,
         request.accept,
       );
+
       io.to(game.id).emit("game-updated", game);
-      if (game.status === "IN_PROGRESS") emitGameStarted(game);
+
+      if (game.status === "IN_PROGRESS") {
+        emitGameStarted(game);
+      }
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
     }
@@ -367,33 +454,49 @@ io.on("connection", (socket) => {
         if (typeof gameId !== "string") {
           throw new GameManagerError("Invalid game ID");
         }
+
         const game = gameManager.getGame(gameId);
+
         gameManager.removePlayer(gameId, socket.id);
+
         void socket.leave(game.id);
+
         const updatedGame = gameManager.hasGame(game.id)
           ? gameManager.getGame(game.id)
           : undefined;
+
         if (updatedGame) {
           io.to(game.id).emit("game-updated", updatedGame);
         }
-        callback?.({ game: updatedGame });
+
+        callback?.({
+          game: updatedGame,
+        });
       } catch (error) {
         const message = getErrorMessage(error);
+
         emitGameError(socket, message);
-        callback?.({ error: message });
+
+        callback?.({
+          error: message,
+        });
       }
     },
   );
 
   socket.on("close-finished-game", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string")
+      if (typeof gameId !== "string") {
         throw new GameManagerError("Invalid game ID");
+      }
+
       const game = gameManager.closeFinishedGame(gameId, socket.id);
+
       io.to(game.id).emit("game-closed", {
         message: "The game was closed.",
         closedBy: socket.id,
       });
+
       io.in(game.id).socketsLeave(game.id);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -405,18 +508,26 @@ io.on("connection", (socket) => {
   });
 });
 
+/**
+ * Snake + Flappy game loop
+ */
 setInterval(() => {
   for (const game of gameManager.advanceSnakeGames()) {
     if (game.status === "IN_PROGRESS" || game.status === "FINISHED") {
       io.to(game.id).emit("game-updated", game);
     }
   }
+
   for (const game of gameManager.advanceFlappyGames()) {
     io.to(game.id).emit("game-updated", game);
   }
 }, 150);
 
+/**
+ * Render provides PORT through environment variables.
+ */
 const port = Number(process.env.PORT ?? 3000);
+
 httpServer.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
