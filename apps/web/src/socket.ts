@@ -6,7 +6,10 @@ const serverUrl =
 export const socket = io(serverUrl, {
   autoConnect: false,
   transports: ["polling", "websocket"],
-  withCredentials: true,
+  // This app uses Socket.IO's connection ID, not cookie-based authentication.
+  // Avoid credentialed cross-origin polling requests so the browser does not
+  // require `Access-Control-Allow-Credentials` from the server.
+  withCredentials: false,
   upgrade: true,
   reconnection: true,
   reconnectionAttempts: 10,
