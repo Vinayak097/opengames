@@ -15,6 +15,7 @@
   "license": "ISC",
   "dependencies": {
     "@opengames/shared": "workspace:*",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
     "chess.js": "^1.4.0",

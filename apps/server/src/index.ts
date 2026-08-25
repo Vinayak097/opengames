@@ -4,6 +4,7 @@ import { Server, type Socket } from "socket.io";
 import type { Game, GameConfig, GameType } from "@opengames/shared";
 import { GameManager, GameManagerError } from "./managers/GameManager";
 
+import cors from "cors";
 const app = express();
 const httpServer = createServer(app);
 
@@ -44,6 +45,11 @@ const defaultAllowedOrigins = [
 /**
  * Socket.IO server
  */
+app.use(
+  cors({
+    origin: defaultAllowedOrigins,
+  }),
+);
 const io = new Server(httpServer, {
   cors: {
     origin: defaultAllowedOrigins,
