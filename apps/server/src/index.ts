@@ -6,10 +6,55 @@ import { GameManager, GameManagerError } from "./managers/GameManager";
 
 const app = express();
 const httpServer = createServer(app);
-const allowedOrigin = process.env.CLIENT_URL ?? "http://localhost:5173";
+
+const defaultAllowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:3000",
+  "https://opengames-web.vercel.app",
+];
+
+const parseAllowedOrigins = (): string[] => {
+  const configured = [
+    process.env.CLIENT_URL,
+    process.env.ALLOWED_ORIGINS,
+  ].flatMap(
+    (value) =>
+      value
+        ?.split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean) ?? [],
+  );
+
+  return configured.length > 0 ? configured : defaultAllowedOrigins;
+};
+
+const allowedOrigins = parseAllowedOrigins();
+
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigin,
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      const isAllowed = allowedOrigins.some(
+        (allowedOrigin) =>
+          allowedOrigin.replace(/\/$/, "") === normalizedOrigin,
+      );
+
+      if (isAllowed) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin not allowed: ${origin}`));
+    },
+    methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 const gameManager = new GameManager();
@@ -36,7 +81,12 @@ type GameEvent = { game: Game };
 type GameErrorEvent = { message: string };
 type TicTacToeMoveRequest = { gameId: string; cell: number };
 type SnakeMoveRequest = { gameId: string; direction: { x: number; y: number } };
-type ChessMoveRequest = { gameId: string; from: string; to: string; promotion?: string };
+type ChessMoveRequest = {
+  gameId: string;
+  from: string;
+  to: string;
+  promotion?: string;
+};
 type RematchResponseRequest = { gameId: string; accept: boolean };
 
 const getErrorMessage = (error: unknown): string =>
@@ -67,16 +117,30 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isTicTacToeMoveRequest = (
   value: unknown,
 ): value is TicTacToeMoveRequest =>
-  isObject(value) && typeof value.gameId === "string" && typeof value.cell === "number";
+  isObject(value) &&
+  typeof value.gameId === "string" &&
+  typeof value.cell === "number";
 
 const isSnakeMoveRequest = (value: unknown): value is SnakeMoveRequest =>
-  isObject(value) && typeof value.gameId === "string" && isObject(value.direction) && typeof value.direction.x === "number" && typeof value.direction.y === "number";
+  isObject(value) &&
+  typeof value.gameId === "string" &&
+  isObject(value.direction) &&
+  typeof value.direction.x === "number" &&
+  typeof value.direction.y === "number";
 
 const isChessMoveRequest = (value: unknown): value is ChessMoveRequest =>
-  isObject(value) && typeof value.gameId === "string" && typeof value.from === "string" && typeof value.to === "string" && (value.promotion === undefined || typeof value.promotion === "string");
+  isObject(value) &&
+  typeof value.gameId === "string" &&
+  typeof value.from === "string" &&
+  typeof value.to === "string" &&
+  (value.promotion === undefined || typeof value.promotion === "string");
 
-const isRematchResponseRequest = (value: unknown): value is RematchResponseRequest =>
-  isObject(value) && typeof value.gameId === "string" && typeof value.accept === "boolean";
+const isRematchResponseRequest = (
+  value: unknown,
+): value is RematchResponseRequest =>
+  isObject(value) &&
+  typeof value.gameId === "string" &&
+  typeof value.accept === "boolean";
 
 const emitGameError = (socket: Socket, message: string): void => {
   socket.emit("game-error", { message } satisfies GameErrorEvent);
@@ -200,8 +264,15 @@ io.on("connection", (socket) => {
 
   socket.on("chess-move", (request: unknown) => {
     try {
-      if (!isChessMoveRequest(request)) throw new GameManagerError("Invalid Chess move request");
-      const game = gameManager.makeChessMove(request.gameId, socket.id, request.from, request.to, request.promotion);
+      if (!isChessMoveRequest(request))
+        throw new GameManagerError("Invalid Chess move request");
+      const game = gameManager.makeChessMove(
+        request.gameId,
+        socket.id,
+        request.from,
+        request.to,
+        request.promotion,
+      );
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -228,7 +299,11 @@ io.on("connection", (socket) => {
       if (!isSnakeMoveRequest(request)) {
         throw new GameManagerError("Invalid Snake move request");
       }
-      const game = gameManager.makeSnakeMove(request.gameId, socket.id, request.direction);
+      const game = gameManager.makeSnakeMove(
+        request.gameId,
+        socket.id,
+        request.direction,
+      );
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));
@@ -237,7 +312,8 @@ io.on("connection", (socket) => {
 
   socket.on("snake-rematch", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string") throw new GameManagerError("Invalid rematch request");
+      if (typeof gameId !== "string")
+        throw new GameManagerError("Invalid rematch request");
       const game = gameManager.requestSnakeRematch(gameId, socket.id);
       io.to(game.id).emit("game-updated", game);
       if (game.status === "IN_PROGRESS") emitGameStarted(game);
@@ -248,7 +324,8 @@ io.on("connection", (socket) => {
 
   socket.on("flappy-flap", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string") throw new GameManagerError("Invalid Flappy move request");
+      if (typeof gameId !== "string")
+        throw new GameManagerError("Invalid Flappy move request");
       const game = gameManager.makeFlappyFlap(gameId, socket.id);
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
@@ -258,7 +335,8 @@ io.on("connection", (socket) => {
 
   socket.on("request-rematch", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string") throw new GameManagerError("Invalid rematch request");
+      if (typeof gameId !== "string")
+        throw new GameManagerError("Invalid rematch request");
       const game = gameManager.requestRematch(gameId, socket.id);
       io.to(game.id).emit("game-updated", game);
     } catch (error) {
@@ -268,8 +346,13 @@ io.on("connection", (socket) => {
 
   socket.on("respond-rematch", (request: unknown) => {
     try {
-      if (!isRematchResponseRequest(request)) throw new GameManagerError("Invalid rematch response");
-      const game = gameManager.respondRematch(request.gameId, socket.id, request.accept);
+      if (!isRematchResponseRequest(request))
+        throw new GameManagerError("Invalid rematch response");
+      const game = gameManager.respondRematch(
+        request.gameId,
+        socket.id,
+        request.accept,
+      );
       io.to(game.id).emit("game-updated", game);
       if (game.status === "IN_PROGRESS") emitGameStarted(game);
     } catch (error) {
@@ -304,9 +387,13 @@ io.on("connection", (socket) => {
 
   socket.on("close-finished-game", (gameId: unknown) => {
     try {
-      if (typeof gameId !== "string") throw new GameManagerError("Invalid game ID");
+      if (typeof gameId !== "string")
+        throw new GameManagerError("Invalid game ID");
       const game = gameManager.closeFinishedGame(gameId, socket.id);
-      io.to(game.id).emit("game-closed", { message: "The game was closed.", closedBy: socket.id });
+      io.to(game.id).emit("game-closed", {
+        message: "The game was closed.",
+        closedBy: socket.id,
+      });
       io.in(game.id).socketsLeave(game.id);
     } catch (error) {
       emitGameError(socket, getErrorMessage(error));

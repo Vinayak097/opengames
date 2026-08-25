@@ -64,15 +64,24 @@ export class GameManager {
   makeTicTacToeMove(gameId: string, playerId: string, cell: unknown): Game {
     const game = this.getGame(gameId);
     if (game.gameType !== "TIC_TAC_TOE" || !game.ticTacToe) {
-      throw new GameManagerError("This game does not support Tic-Tac-Toe moves");
+      throw new GameManagerError(
+        "This game does not support Tic-Tac-Toe moves",
+      );
     }
     if (game.status !== "IN_PROGRESS") {
       throw new GameManagerError("The game is not in progress");
     }
-    if (typeof cell !== "number" || !Number.isInteger(cell) || cell < 0 || cell > 8) {
+    if (
+      typeof cell !== "number" ||
+      !Number.isInteger(cell) ||
+      cell < 0 ||
+      cell > 8
+    ) {
       throw new GameManagerError("Choose a valid board cell");
     }
-    const playerIndex = game.players.findIndex((player) => player.id === playerId);
+    const playerIndex = game.players.findIndex(
+      (player) => player.id === playerId,
+    );
     if (playerIndex === -1) {
       throw new GameManagerError("Player is not in this game");
     }
@@ -97,18 +106,35 @@ export class GameManager {
     return game;
   }
 
-  makeChessMove(gameId: string, playerId: string, from: unknown, to: unknown, promotion: unknown): Game {
+  makeChessMove(
+    gameId: string,
+    playerId: string,
+    from: unknown,
+    to: unknown,
+    promotion: unknown,
+  ): Game {
     const game = this.getGame(gameId);
-    if (game.gameType !== "CHESS" || !game.chess) throw new GameManagerError("This game does not support Chess moves");
-    if (game.status !== "IN_PROGRESS") throw new GameManagerError("The game is not in progress");
-    if (typeof from !== "string" || typeof to !== "string") throw new GameManagerError("Choose valid Chess squares");
-    const playerIndex = game.players.findIndex((player) => player.id === playerId);
-    if (playerIndex === -1) throw new GameManagerError("Player is not in this game");
+    if (game.gameType !== "CHESS" || !game.chess)
+      throw new GameManagerError("This game does not support Chess moves");
+    if (game.status !== "IN_PROGRESS")
+      throw new GameManagerError("The game is not in progress");
+    if (typeof from !== "string" || typeof to !== "string")
+      throw new GameManagerError("Choose valid Chess squares");
+    const playerIndex = game.players.findIndex(
+      (player) => player.id === playerId,
+    );
+    if (playerIndex === -1)
+      throw new GameManagerError("Player is not in this game");
     const color: ChessColor = playerIndex === 0 ? "w" : "b";
-    if (game.chess.turn !== color) throw new GameManagerError("Wait for your turn");
+    if (game.chess.turn !== color)
+      throw new GameManagerError("Wait for your turn");
     const chess = new Chess(chessFen(game.chess));
     try {
-      const move = chess.move({ from, to, promotion: typeof promotion === "string" ? promotion : undefined });
+      const move = chess.move({
+        from,
+        to,
+        promotion: typeof promotion === "string" ? promotion : undefined,
+      });
       game.chess = chessState(chess, move.from, move.to);
       if (chess.isGameOver()) game.status = "FINISHED";
     } catch {
@@ -120,7 +146,9 @@ export class GameManager {
   requestTicTacToeRematch(gameId: string, playerId: string): Game {
     const game = this.getGame(gameId);
     if (game.gameType !== "TIC_TAC_TOE" || !game.ticTacToe) {
-      throw new GameManagerError("This game does not support Tic-Tac-Toe rematches");
+      throw new GameManagerError(
+        "This game does not support Tic-Tac-Toe rematches",
+      );
     }
     if (game.status !== "FINISHED") {
       throw new GameManagerError("Finish the game before requesting a rematch");
@@ -153,7 +181,8 @@ export class GameManager {
     if (!game.players.some((player) => player.id === playerId)) {
       throw new GameManagerError("Player is not in this game");
     }
-    if (!game.snake.rematchVotes.includes(playerId)) game.snake.rematchVotes.push(playerId);
+    if (!game.snake.rematchVotes.includes(playerId))
+      game.snake.rematchVotes.push(playerId);
     if (game.snake.rematchVotes.length === MAX_PLAYERS_PER_GAME) {
       game.snake = createSnakeState(game.players);
       game.status = "IN_PROGRESS";
@@ -163,27 +192,47 @@ export class GameManager {
 
   requestRematch(gameId: string, playerId: string): Game {
     const game = this.getGame(gameId);
-    if (game.status !== "FINISHED" || !game.rematch) throw new GameManagerError("This game is not ready for a rematch");
-    if (!game.players.some((player) => player.id === playerId)) throw new GameManagerError("Player is not in this game");
-    game.rematch = { requestedBy: playerId, acceptedBy: [playerId], declinedBy: [] };
+    if (game.status !== "FINISHED" || !game.rematch)
+      throw new GameManagerError("This game is not ready for a rematch");
+    if (!game.players.some((player) => player.id === playerId))
+      throw new GameManagerError("Player is not in this game");
+    game.rematch = {
+      requestedBy: playerId,
+      acceptedBy: [playerId],
+      declinedBy: [],
+    };
     return game;
   }
 
   respondRematch(gameId: string, playerId: string, accept: boolean): Game {
     const game = this.getGame(gameId);
-    if (game.status !== "FINISHED" || !game.rematch?.requestedBy) throw new GameManagerError("There is no pending rematch request");
-    if (game.rematch.requestedBy === playerId || !game.players.some((player) => player.id === playerId)) throw new GameManagerError("Only the other player can respond");
+    if (game.status !== "FINISHED" || !game.rematch?.requestedBy)
+      throw new GameManagerError("There is no pending rematch request");
+    if (
+      game.rematch.requestedBy === playerId ||
+      !game.players.some((player) => player.id === playerId)
+    )
+      throw new GameManagerError("Only the other player can respond");
     if (!accept) {
       game.rematch.declinedBy = [playerId];
       return game;
     }
-    game.rematch.acceptedBy = [...new Set([...game.rematch.acceptedBy, playerId])];
+    game.rematch.acceptedBy = [
+      ...new Set([...game.rematch.acceptedBy, playerId]),
+    ];
     if (game.rematch.acceptedBy.length === MAX_PLAYERS_PER_GAME) {
       if (game.gameType === "TIC_TAC_TOE" && game.ticTacToe) {
-        game.ticTacToe = { board: Array(9).fill(null), turn: game.players[0].id, winner: null, rematchVotes: [] };
+        game.ticTacToe = {
+          board: Array(9).fill(null),
+          turn: game.players[0].id,
+          winner: null,
+          rematchVotes: [],
+        };
       }
-      if (game.gameType === "SNAKE") game.snake = createSnakeState(game.players);
-      if (game.gameType === "FLAPPY") game.flappy = createFlappyState(game.players);
+      if (game.gameType === "SNAKE")
+        game.snake = createSnakeState(game.players);
+      if (game.gameType === "FLAPPY")
+        game.flappy = createFlappyState(game.players);
       if (game.gameType === "CHESS") game.chess = createChessState();
       game.rematch = { requestedBy: null, acceptedBy: [], declinedBy: [] };
       game.status = "IN_PROGRESS";
@@ -230,11 +279,16 @@ export class GameManager {
     if (!isSnakeDirection(direction)) {
       throw new GameManagerError("Choose a valid Snake direction");
     }
-    const snakePlayer = game.snake.players.find((player) => player.playerId === playerId);
+    const snakePlayer = game.snake.players.find(
+      (player) => player.playerId === playerId,
+    );
     if (!snakePlayer || !snakePlayer.alive) {
       throw new GameManagerError("You are not active in this game");
     }
-    if (direction.x === -snakePlayer.direction.x && direction.y === -snakePlayer.direction.y) {
+    if (
+      direction.x === -snakePlayer.direction.x &&
+      direction.y === -snakePlayer.direction.y
+    ) {
       return game;
     }
     snakePlayer.direction = direction;
@@ -243,9 +297,13 @@ export class GameManager {
 
   makeFlappyFlap(gameId: string, playerId: string): Game {
     const game = this.getGame(gameId);
-    const player = game.flappy?.players?.find(({ playerId: id }) => id === playerId);
-    if (game.gameType !== "FLAPPY" || !game.flappy || !player) throw new GameManagerError("This game does not support Flappy moves");
-    if (game.status !== "IN_PROGRESS" || !player.alive) throw new GameManagerError("The game is not in progress");
+    const player = game.flappy?.players?.find(
+      ({ playerId: id }) => id === playerId,
+    );
+    if (game.gameType !== "FLAPPY" || !game.flappy || !player)
+      throw new GameManagerError("This game does not support Flappy moves");
+    if (game.status !== "IN_PROGRESS" || !player.alive)
+      throw new GameManagerError("The game is not in progress");
     player.velocity = -2.8;
     return game;
   }
@@ -253,7 +311,12 @@ export class GameManager {
   advanceFlappyGames(): Game[] {
     const updatedGames: Game[] = [];
     for (const game of this.games.values()) {
-      if (game.status !== "IN_PROGRESS" || game.gameType !== "FLAPPY" || !game.flappy?.players) continue;
+      if (
+        game.status !== "IN_PROGRESS" ||
+        game.gameType !== "FLAPPY" ||
+        !game.flappy?.players
+      )
+        continue;
       advanceFlappy(game.flappy);
       if (game.flappy.winner) game.status = "FINISHED";
       updatedGames.push(game);
@@ -264,7 +327,12 @@ export class GameManager {
   advanceSnakeGames(): Game[] {
     const updatedGames: Game[] = [];
     for (const game of this.games.values()) {
-      if (game.status !== "IN_PROGRESS" || game.gameType !== "SNAKE" || !game.snake) continue;
+      if (
+        game.status !== "IN_PROGRESS" ||
+        game.gameType !== "SNAKE" ||
+        !game.snake
+      )
+        continue;
       advanceSnake(game.snake);
       if (game.snake.winner) game.status = "FINISHED";
       updatedGames.push(game);
@@ -339,9 +407,14 @@ function hasWinningLine(
   mark: TicTacToeMark,
 ): boolean {
   return [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8],
-    [0, 3, 6], [1, 4, 7], [2, 5, 8],
-    [0, 4, 8], [2, 4, 6],
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
   ].some((line) => line.every((cell) => board[cell] === mark));
 }
 
@@ -349,12 +422,34 @@ function createChessState(): ChessState {
   return chessState(new Chess(), null, null);
 }
 
-function chessState(chess: Chess, from: string | null, to: string | null): ChessState {
+function chessState(
+  chess: Chess,
+  from: string | null,
+  to: string | null,
+): ChessState {
   const board = chess.board();
-  const pieces = board.flatMap((rank) => rank.map((piece) => piece?.type ?? null));
-  const colors = board.flatMap((rank) => rank.map((piece) => piece?.color ?? null));
-  const winner: ChessState["winner"] = chess.isCheckmate() ? (chess.turn() === "w" ? "b" : "w") : chess.isDraw() ? "DRAW" : null;
-  return { fen: chess.fen(), board: pieces, colors, turn: chess.turn(), winner, check: chess.inCheck(), lastMove: from && to ? { from, to } : null };
+  const pieces = board.flatMap((rank) =>
+    rank.map((piece) => piece?.type ?? null),
+  );
+  const colors = board.flatMap((rank) =>
+    rank.map((piece) => piece?.color ?? null),
+  );
+  const winner: ChessState["winner"] = chess.isCheckmate()
+    ? chess.turn() === "w"
+      ? "b"
+      : "w"
+    : chess.isDraw()
+      ? "DRAW"
+      : null;
+  return {
+    fen: chess.fen(),
+    board: pieces,
+    colors,
+    turn: chess.turn(),
+    winner,
+    check: chess.inCheck(),
+    lastMove: from && to ? { from, to } : null,
+  };
 }
 
 function chessFen(state: ChessState): string {
@@ -369,8 +464,28 @@ function createSnakeState(players: Player[]): SnakeState {
     winner: null,
     rematchVotes: [],
     players: [
-      { playerId: players[0].id, body: [{ x: 4, y: 4 }, { x: 3, y: 4 }, { x: 2, y: 4 }], direction: { x: 1, y: 0 }, score: 0, alive: true },
-      { playerId: players[1].id, body: [{ x: 19, y: 9 }, { x: 20, y: 9 }, { x: 21, y: 9 }], direction: { x: -1, y: 0 }, score: 0, alive: true },
+      {
+        playerId: players[0].id,
+        body: [
+          { x: 4, y: 4 },
+          { x: 3, y: 4 },
+          { x: 2, y: 4 },
+        ],
+        direction: { x: 1, y: 0 },
+        score: 0,
+        alive: true,
+      },
+      {
+        playerId: players[1].id,
+        body: [
+          { x: 19, y: 9 },
+          { x: 20, y: 9 },
+          { x: 21, y: 9 },
+        ],
+        direction: { x: -1, y: 0 },
+        score: 0,
+        alive: true,
+      },
     ],
   };
 }
@@ -378,16 +493,38 @@ function createSnakeState(players: Player[]): SnakeState {
 function advanceSnake(state: SnakeState): void {
   const nextHeads = state.players.map((snakePlayer) => {
     const head = snakePlayer.body[0];
-    return { x: head.x + snakePlayer.direction.x, y: head.y + snakePlayer.direction.y };
+    return {
+      x: head.x + snakePlayer.direction.x,
+      y: head.y + snakePlayer.direction.y,
+    };
   });
 
   state.players.forEach((snakePlayer, index) => {
     if (!snakePlayer.alive) return;
     const nextHead = nextHeads[index];
-    const hitWall = nextHead.x < 0 || nextHead.x >= state.width || nextHead.y < 0 || nextHead.y >= state.height;
-    const hitSelf = snakePlayer.body.some((part) => part.x === nextHead.x && part.y === nextHead.y);
-    const hitOpponent = state.players.some((other, otherIndex) => otherIndex !== index && other.alive && other.body.some((part) => part.x === nextHead.x && part.y === nextHead.y));
-    const hitHead = nextHeads.some((head, otherIndex) => otherIndex !== index && state.players[otherIndex].alive && head.x === nextHead.x && head.y === nextHead.y);
+    const hitWall =
+      nextHead.x < 0 ||
+      nextHead.x >= state.width ||
+      nextHead.y < 0 ||
+      nextHead.y >= state.height;
+    const hitSelf = snakePlayer.body.some(
+      (part) => part.x === nextHead.x && part.y === nextHead.y,
+    );
+    const hitOpponent = state.players.some(
+      (other, otherIndex) =>
+        otherIndex !== index &&
+        other.alive &&
+        other.body.some(
+          (part) => part.x === nextHead.x && part.y === nextHead.y,
+        ),
+    );
+    const hitHead = nextHeads.some(
+      (head, otherIndex) =>
+        otherIndex !== index &&
+        state.players[otherIndex].alive &&
+        head.x === nextHead.x &&
+        head.y === nextHead.y,
+    );
     if (hitWall || hitSelf || hitOpponent || hitHead) {
       snakePlayer.alive = false;
       return;
@@ -403,7 +540,8 @@ function advanceSnake(state: SnakeState): void {
 
   const alivePlayers = state.players.filter((snakePlayer) => snakePlayer.alive);
   if (alivePlayers.length <= 1) {
-    state.winner = alivePlayers.length === 1 ? alivePlayers[0].playerId : "DRAW";
+    state.winner =
+      alivePlayers.length === 1 ? alivePlayers[0].playerId : "DRAW";
     state.players.forEach((snakePlayer) => {
       if (!snakePlayer.alive) snakePlayer.body = [];
     });
@@ -412,14 +550,27 @@ function advanceSnake(state: SnakeState): void {
 
 function nextFood(state: SnakeState): { x: number; y: number } {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const food = { x: Math.floor(Math.random() * state.width), y: Math.floor(Math.random() * state.height) };
-    if (!state.players.some((snakePlayer) => snakePlayer.body.some((part) => part.x === food.x && part.y === food.y))) return food;
+    const food = {
+      x: Math.floor(Math.random() * state.width),
+      y: Math.floor(Math.random() * state.height),
+    };
+    if (
+      !state.players.some((snakePlayer) =>
+        snakePlayer.body.some((part) => part.x === food.x && part.y === food.y),
+      )
+    )
+      return food;
   }
   return { x: 0, y: 0 };
 }
 
 function isSnakeDirection(value: unknown): value is SnakeDirection {
-  if (!isPlainObject(value) || typeof value.x !== "number" || typeof value.y !== "number") return false;
+  if (
+    !isPlainObject(value) ||
+    typeof value.x !== "number" ||
+    typeof value.y !== "number"
+  )
+    return false;
   return Math.abs(value.x) + Math.abs(value.y) === 1;
 }
 
@@ -431,7 +582,18 @@ function createFlappyState(players: Player[]): FlappyState {
     score: 0,
     alive: true,
   }));
-  return { score: 0, bestScore: 0, birdY: 45, velocity: 0, pipeX: 100, pipeGapY: 48, running: true, players: flappyPlayers, winner: null, rematchVotes: [] };
+  return {
+    score: 0,
+    bestScore: 0,
+    birdY: 45,
+    velocity: 0,
+    pipeX: 100,
+    pipeGapY: 48,
+    running: true,
+    players: flappyPlayers,
+    winner: null,
+    rematchVotes: [],
+  };
 }
 
 function advanceFlappy(state: FlappyState): void {
@@ -445,7 +607,11 @@ function advanceFlappy(state: FlappyState): void {
     player.velocity += 0.18;
     player.birdY += player.velocity;
     const passedPipe = state.pipeX > 16 && state.pipeX < 18;
-    const hitPipe = state.pipeX > 10 && state.pipeX < 29 && (player.birdY < state.pipeGapY - 12 || player.birdY > state.pipeGapY + 12);
+    const hitPipe =
+      state.pipeX > 10 &&
+      state.pipeX < 29 &&
+      (player.birdY < state.pipeGapY - 12 ||
+        player.birdY > state.pipeGapY + 12);
     if (player.birdY < 0 || player.birdY > 94 || hitPipe) {
       player.alive = false;
     } else if (passedPipe) {
